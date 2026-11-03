@@ -4,12 +4,15 @@ import threading
 from pathlib import Path
 METHOD = Path(__file__).resolve().parents[1] / '方法验证核对'
 sys.path.insert(0, str(METHOD))
+sys.path.append(str(METHOD.parent / '资料核对工具'))
+from updater import launch_installed, dispatch_helper
+if __name__ == '__main__' and dispatch_helper('content'):
+    raise SystemExit(0)
 from app import Api, place, resource, webview
 from ai import Cancelled
 from report import write_report
 from content_core import prepare_content
 from content_ai import assemble_content, request_content
-from updater import launch_installed
 
 class ContentApi(Api):
 

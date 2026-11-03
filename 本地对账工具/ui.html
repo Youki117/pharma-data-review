@@ -182,6 +182,14 @@
          display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted)}
   footer .grow{margin-left:auto}
   [hidden]{display:none!important}
+
+
+header{padding:10px 24px;min-height:52px;flex-shrink:0}.brand span{display:none}
+.embedded header{min-height:48px;padding:8px 24px}.embedded .brand{display:none}.embedded #modelBadge{margin-right:auto}
+button{border-radius:7px}button.primary{padding-left:20px;padding-right:20px}
+nav{width:184px;padding-top:12px}.grp{letter-spacing:0;padding:12px 18px 8px}.lv{margin:2px 8px;padding:9px 10px;width:calc(100% - 16px);border-left:0;border-radius:6px}.lv.on{box-shadow:inset 3px 0 var(--accent)}
+.desc,.navnote{display:none}.toolbar{padding:12px 24px}.tablewrap{min-height:0}.empty{height:100%;min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px}.empty h2{font-size:20px;font-weight:600;letter-spacing:.01em;margin-bottom:10px}.empty p{font-size:12px;line-height:1.8}.empty .steps,.empty .tree{display:none}.stat{padding:9px 20px}.stat b{font-size:20px}footer{padding:7px 24px;font-size:11px}.footnote{max-width:50%}
+@media(max-width:900px){header,.embedded header{padding-left:16px;padding-right:16px}nav{width:160px}.toolbar{padding:10px 16px}.lv{padding:8px}.stat{padding:8px 12px}}
 </style>
 </head>
 <body>
@@ -192,10 +200,10 @@
     <span>汇总表 × 原始检验报告单</span><span id="ver"></span>
   </div>
   <div class="pathbox">
-    <input id="path" placeholder="选择存放稳定性资料的根目录…" spellcheck="false">
-    <button id="pick">浏览…</button>
+    <input id="path" aria-label="稳定性资料目录" title="可拖入资料文件夹，或粘贴完整路径" placeholder="选择存放稳定性资料的根目录…" spellcheck="false">
+    <button id="pick" title="选择资料根目录；检验报告单可在多级子目录内">浏览…</button>
   </div>
-  <button id="go" class="primary" disabled>开始核对</button>
+  <button id="go" title="逐值核对汇总表与原始报告，并列出读取覆盖情况" class="primary" disabled>开始核对</button>
 </header>
 
 <div class="bar" id="prog" hidden>
@@ -223,8 +231,8 @@
     <div class="desc" id="desc" hidden></div>
     <div class="tablewrap" id="wrap">
       <div class="empty" id="empty">
-        <h2>选择一个数据根目录，然后点「开始核对」</h2>
-        <p>目录里每个品种一个子文件夹；汇总表放在品种文件夹第一层，检验报告单放在它下面任意子目录。只识别 <code>.docx</code>。</p>
+        <h2>拖入稳定性资料文件夹</h2>
+        <p>汇总表 ＋ 原始检验报告单</p>
         <div class="tree">数据根目录/<br>
 &nbsp;&nbsp;├ 某某片/<br>
 &nbsp;&nbsp;│&nbsp;&nbsp;├ 3-2-P-8稳定性.docx&nbsp;&nbsp;<span style="color:var(--accent)">← 汇总表</span><br>
@@ -358,6 +366,9 @@ function render() {
   });
   $('#nav').innerHTML = nav; $('#nav').hidden = false;
   $('#nav').querySelectorAll('.lv').forEach(el => {
+    el.title = (DATA.levels.find(l => l.name === el.dataset.lv) || {}).desc || '查看所有核对问题';
+    el.tabIndex=0; el.setAttribute('role','button');
+    el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();el.click();}};
     el.onclick = () => { LEVEL = el.dataset.lv || null; GID = null; paint(); };
   });
 

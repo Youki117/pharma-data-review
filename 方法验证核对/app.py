@@ -4,6 +4,11 @@ import sys
 import threading
 import webbrowser
 from pathlib import Path
+BASE = Path(__file__).resolve().parent
+sys.path.append(str(BASE.parent / '资料核对工具'))
+from updater import VERSION, Updater, launch_installed, dispatch_helper
+if __name__ == '__main__' and dispatch_helper('method'):
+    raise SystemExit(0)
 from ai import Cancelled, DEFAULT_BASE, DEFAULT_MODEL, assemble, request_review
 from core import prepare
 from report import write_report
@@ -22,10 +27,7 @@ def dpi_scale():
         return 1.0
 DPI = dpi_scale()
 import webview
-BASE = Path(__file__).resolve().parent
-sys.path.append(str(BASE.parent / '资料核对工具'))
 from drop_support import deliver_drop, install_drop, paths_from_event
-from updater import VERSION, Updater, launch_installed
 
 def resource(name):
     return str(Path(getattr(sys, '_MEIPASS', BASE)) / name)

@@ -6,12 +6,14 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path[:0] = [str(ROOT / '方法验证核对'), str(ROOT / '内容一致性核对'), str(ROOT)]
+from updater import Updater, launch_installed, dispatch_helper
+if __name__ == '__main__' and dispatch_helper('suite'):
+    raise SystemExit(0)
 from app import Api as MethodApi, DPI, webview
 from content_app import ContentApi
 from 本地对账工具 import app as stability_app
 from folder_batch import BatchQueue
 from drop_support import deliver_drop, install_drop, paths_from_event
-from updater import Updater, launch_installed
 NAME = '资料核对工具'
 AI_METHODS = {'settings', 'configure', 'pick', 'start', 'stop', 'progress', 'results', 'evidence', 'open_source', 'open_report', 'open_output', 'scan_folder', 'start_batch', 'batch_status', 'select_batch', 'open_batch_report'}
 STABILITY_METHODS = {'pick', 'start', 'version', 'progress', 'results', 'export', 'open_loc', 'reveal', 'quit'}
@@ -130,9 +132,9 @@ def render_shell():
     for name, source in [('method', ROOT / '方法验证核对' / 'ui.html'), ('stability', ROOT / '本地对账工具' / 'ui.html'), ('content', ROOT / '方法验证核对' / 'ui.html')]:
         path = assets / 'pages' / name / 'ui.html' if frozen else source
         html = path.read_text(encoding='utf-8')
-        bridge = "<script>\nwindow.pywebview={api:new Proxy({}, {get:(_,method)=>(...args)=>parent.pywebview.api.invoke(TASK,method,args)})};\nwindow.addEventListener('suiteactivate',async()=>{\n  if(typeof updateSettings==='function'){\n    try{updateSettings(await window.pywebview.api.settings());}\n    catch(e){error('共用设置读取失败，请重新打开工具。');}\n  }\n});\n</script>".replace('TASK', json.dumps(name))
+        bridge = "<script>\ndocument.documentElement.classList.add('embedded');\nwindow.pywebview={api:new Proxy({}, {get:(_,method)=>(...args)=>parent.pywebview.api.invoke(TASK,method,args)})};\nwindow.addEventListener('suiteactivate',async()=>{\n  if(typeof updateSettings==='function'){\n    try{updateSettings(await window.pywebview.api.settings());}\n    catch(e){error('共用设置读取失败，请重新打开工具。');}\n  }\n});\n</script>".replace('TASK', json.dumps(name))
         if name == 'stability':
-            bridge += "<script>window.receiveDroppedFiles=function(result){\n              if(!result.ok){const error=document.getElementById('err');error.textContent=result.error;error.hidden=false;return;}\n              const input=document.getElementById('path');input.value=result.path;input.dispatchEvent(new Event('input'));\n              let note=document.getElementById('dropNotice');if(!note){note=document.createElement('div');note.id='dropNotice';note.style.cssText='padding:6px 18px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--rule)';document.querySelector('header').after(note);}\n              note.textContent=result.notice||'资料目录已导入，点击开始核对。';\n            };</script>"
+            bridge += "<script>window.receiveDroppedFiles=function(result){\n              if(!result.ok){const error=document.getElementById('err');error.textContent=result.error;error.hidden=false;return;}\n              const input=document.getElementById('path');input.value=result.path;input.dispatchEvent(new Event('input'));\n              let note=document.getElementById('dropNotice');if(!note){note=document.createElement('span');note.id='dropNotice';note.style.cssText='font-size:12px;color:var(--muted)';document.querySelector('header').append(note);}\n              note.textContent='目录已导入';note.title=result.notice||'资料目录已导入，点击开始核对。';\n            };</script>"
         if '<script>' not in html:
             raise ValueError('页面缺少初始化脚本：' + name)
         pages[name] = html.replace('<script>', bridge + '<script>', 1)

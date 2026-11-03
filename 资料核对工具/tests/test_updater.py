@@ -115,20 +115,20 @@ class UpdateTests(unittest.TestCase):
             self.assertEqual(thread.call_count, 1)
             self.assertFalse(update.install()['ok'])
 
-    def test_successful_install_waits_for_ready_then_switches_version(self):
+    def test_handoff_waits_for_helper_before_closing_original_window(self):
         self.install_case(fail=False)
 
-    def test_failed_launch_preserves_previous_active_and_original_files(self):
+    def test_helper_launch_failure_leaves_window_and_original_files(self):
         self.install_case(fail=True)
 
     def install_case(self, fail):
         raw = package()
         info = updater.release_info(release(raw=raw), 'suite')
         with tempfile.TemporaryDirectory() as temporary:
-            home = Path(temporary)
-            active = home / 'active.json'
-            active.write_text('{"version":"1.0.0"}', encoding='utf-8')
-            original = home / 'original.exe'
+            home = Path(temporary) / 'state'
+            target = Path(temporary) / '原程序'
+            target.mkdir()
+            original = target / '资料核对工具.exe'
             original.write_bytes(b'original')
             update = updater.Updater('suite')
             update._window = Mock()
@@ -137,20 +137,24 @@ class UpdateTests(unittest.TestCase):
                 path.write_bytes(raw)
 
             def launch(args, **kwargs):
+                self.assertEqual(args[1], '--apply-update')
+                plan = Path(args[2])
+                self.assertEqual(json.loads(plan.read_text(encoding='utf-8'))['target'], str(target.resolve()))
+                self.assertFalse((home / 'versions').exists())
+                update._window.destroy.assert_not_called()
                 if fail:
                     raise OSError('launch failed')
-                (home / ('ready-' + args[-1])).write_text(json.dumps({'version': info['version'], 'pid': 123}), encoding='utf-8')
+                (plan.parent / 'helper-ready').write_text('123', encoding='ascii')
                 return Mock(pid=123, poll=lambda: None)
-            with patch('updater.update_home', return_value=home), patch('updater.download', side_effect=fetch), patch('updater.subprocess.Popen', side_effect=launch):
+            with patch('updater.update_home', return_value=home), patch('updater.sys.executable', str(original)), patch('updater.download', side_effect=fetch), patch('updater.subprocess.Popen', side_effect=launch):
                 update._install(info)
             self.assertEqual(original.read_bytes(), b'original')
             if fail:
-                self.assertEqual(json.loads(active.read_text())['version'], '1.0.0')
                 self.assertEqual(update.status()['stage'], 'available')
+                self.assertFalse(list(home.glob('pending-*')))
                 update._window.destroy.assert_not_called()
             else:
-                self.assertEqual(json.loads(active.read_text())['version'], info['version'])
-                self.assertTrue(updater.executable(home, 'suite', info['version']).is_file())
+                self.assertEqual(len(list(home.glob('pending-*/plan.json'))), 1)
                 update._window.destroy.assert_called_once()
 
     def test_original_entry_uses_installed_newer_version_and_source_never_redirects(self):

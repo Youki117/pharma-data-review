@@ -11,13 +11,13 @@ import time
 import urllib.parse
 import urllib.request
 import zipfile
-import uuid
 from pathlib import Path, PurePosixPath
-VERSION = '1.3.0'
+VERSION = '1.4.0'
 REPOSITORY = 'Youki117/pharma-data-review'
 PRODUCTS = {'suite': '资料核对工具', 'method': '方法验证资料核对', 'content': '内容一致性核对'}
 MAX_DOWNLOAD = 200 * 1024 * 1024
 MAX_EXTRACT = 600 * 1024 * 1024
+from update_install import cleanup_finished, dispatch_helper, validate_target
 
 def version_tuple(value):
     if not isinstance(value, str) or not re.fullmatch('v?\\d{1,6}\\.\\d{1,6}\\.\\d{1,6}', value):
@@ -36,6 +36,15 @@ def launch_installed(product):
     if not getattr(sys, 'frozen', False):
         return False
     home = update_home(product)
+    try:
+        fixed = json.loads((home / 'fixed.json').read_text(encoding='utf-8'))
+        name = PRODUCTS[product] + '.exe'
+        target = Path(fixed['directory']) / name
+        if version_tuple(fixed['version']) > version_tuple(VERSION) and target.is_file():
+            subprocess.Popen([str(target)], cwd=target.parent)
+            return True
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
     try:
         active = json.loads((home / 'active.json').read_text(encoding='utf-8'))
         newer = active['version']
@@ -135,7 +144,11 @@ class Updater:
                 if token and re.fullmatch('[0-9a-f]{32}', token[0]):
                     home = update_home(self.product)
                     home.mkdir(parents=True, exist_ok=True)
-                    (home / ('ready-' + token[0])).write_text(json.dumps({'version': VERSION, 'pid': os.getpid()}), encoding='utf-8')
+                    ready = home / ('ready-' + token[0])
+                    pending = ready.with_suffix('.pending')
+                    pending.write_text(json.dumps({'version': VERSION, 'pid': os.getpid()}), encoding='utf-8')
+                    os.replace(pending, ready)
+            cleanup_finished(self.product)
             self.check()
         window.events.loaded += loaded
         window.events.closed += self._cancel.set
@@ -189,57 +202,50 @@ class Updater:
         return {'ok': True}
 
     def _install(self, info):
-        process, installed, activated = (None, None, False)
+        process, stage, handed_off = (None, None, False)
         try:
+            target = Path(sys.executable).resolve().parent
+            validate_target(target, self.product)
+            with tempfile.TemporaryFile(dir=target):
+                pass
             home = update_home(self.product)
             home.mkdir(parents=True, exist_ok=True)
-            with tempfile.TemporaryDirectory(prefix='download-', dir=home) as temporary:
-                stage = Path(temporary)
-                archive = stage / 'update.zip'
-                download(info, archive, self._message, self._cancel)
-                self._message('正在解压和准备新版本…')
-                unpacked = stage / 'package'
-                extract_package(archive, unpacked, self.product)
-                if self._cancel.is_set():
-                    raise ValueError('更新已取消。')
-                target = executable(home, self.product, info['version'])
-                target.parent.parent.parent.mkdir(parents=True, exist_ok=True)
-                if target.parent.parent.exists():
-                    raise ValueError('该版本目录已存在，请先重新打开工具或联系维护人员。')
-                shutil.move(str(unpacked), str(target.parent.parent))
-                installed = target.parent.parent
-                pending = home / 'active.pending'
-                pending.write_text(json.dumps({'version': info['version']}), encoding='utf-8')
-                token = uuid.uuid4().hex
-                ready = home / ('ready-' + token)
-                process = subprocess.Popen([str(target), '--update-token', token], cwd=target.parent)
-                deadline = time.monotonic() + 30
-                while not ready.is_file():
-                    if process.poll() is not None or time.monotonic() >= deadline or self._cancel.is_set():
-                        raise ValueError('新版未成功打开，已保留原程序；请重试或手动下载。')
-                    time.sleep(0.15)
-                acknowledgement = json.loads(ready.read_text(encoding='utf-8'))
-                ready.unlink()
-                if acknowledgement != {'version': info['version'], 'pid': process.pid}:
-                    raise ValueError('新版启动确认不符，已保留原程序。')
-                os.replace(pending, home / 'active.json')
-                activated = True
-            with self._lock:
-                self._state.update(stage='installed', message='新版已启动，正在关闭旧窗口…')
-            if self._window:
-                self._window.destroy()
+            stage = Path(tempfile.mkdtemp(prefix='pending-', dir=home))
+            archive = stage / 'update.zip'
+            download(info, archive, self._message, self._cancel)
+            self._message('正在准备更新并检查原程序位置…')
+            extract_package(archive, stage / 'package', self.product)
+            if self._cancel.is_set():
+                raise ValueError('更新已取消。')
+            plan = stage / 'plan.json'
+            plan.write_text(json.dumps({'product': self.product, 'target': str(target), 'version': info['version'], 'pid': os.getpid()}, ensure_ascii=False), encoding='utf-8')
+            helper = stage / 'package' / PRODUCTS[self.product] / (PRODUCTS[self.product] + '.exe')
+            process = subprocess.Popen([str(helper), '--apply-update', str(plan)], cwd=helper.parent)
+            deadline = time.monotonic() + 20
+            while not (stage / 'helper-ready').is_file():
+                if process.poll() is not None or time.monotonic() >= deadline or self._cancel.is_set():
+                    raise ValueError('更新助手未能启动，原程序仍可使用。')
+                time.sleep(0.15)
+            if int((stage / 'helper-ready').read_text(encoding='ascii')) != process.pid:
+                raise ValueError('更新助手启动确认不符。')
+            if not self._window:
+                raise ValueError('未连接程序窗口，不能完成重启。')
+            self._message('正在关闭旧程序，随后替换原位置并重启…')
+            self._window.destroy()
+            handed_off = True
         except Exception as error:
-            if activated:
-                with self._lock:
-                    self._state.update(stage='installed', message='新版已启动，可以关闭当前旧窗口。')
-                return
-            try:
-                if process and process.poll() is None:
-                    process.terminate()
+            if process and process.poll() is None:
+                process.terminate()
+                try:
                     process.wait(timeout=5)
-                if installed and installed.exists() and (installed.parent.resolve() == (update_home(self.product) / 'versions').resolve()):
-                    installed.rename(installed.with_name(installed.name + '-failed-' + uuid.uuid4().hex[:8]))
-            except (OSError, subprocess.TimeoutExpired):
-                pass
+                except subprocess.TimeoutExpired:
+                    pass
             with self._lock:
-                self._state.update(stage='available', message=str(error) if isinstance(error, ValueError) else '更新未完成，原程序可继续使用；请重试或手动下载。')
+                self._state.update(stage='available', message=str(error) if isinstance(error, ValueError) else '更新准备未完成，请检查目录写权限或稍后重试；原程序可继续使用。')
+        finally:
+            if stage and (not handed_off):
+                try:
+                    if stage.resolve().parent == update_home(self.product).resolve():
+                        shutil.rmtree(stage)
+                except OSError:
+                    pass

@@ -1,35 +1,49 @@
 (() => {
-  if (document.getElementById('updateBar')) return;
-  const bar = document.createElement('div');
-  bar.id = 'updateBar';
-  bar.style.cssText = 'display:flex;align-items:center;gap:12px;flex-shrink:0;padding:5px 20px;border-bottom:1px solid var(--rule);background:var(--surface);color:var(--muted);font:12px/1.6 "Microsoft YaHei",sans-serif';
-  const status = document.createElement('span');
-  status.setAttribute('role', 'status');
-  status.style.flex = '1';
-  const check = document.createElement('button'); check.textContent = '检查更新';
-  const install = document.createElement('button'); install.textContent = '更新并重启'; install.hidden = true;
-  const details = document.createElement('button'); details.textContent = '更新说明'; details.hidden = true;
-  for (const button of [check, details, install]) button.style.cssText = 'font:inherit;border:1px solid var(--rule);border-radius:5px;padding:2px 8px;color:var(--ink);background:var(--surface);cursor:pointer';
-  bar.append(status, check, details, install);
-  (document.querySelector('.suitebar') || document.querySelector('header')).after(bar);
+  if (document.getElementById('updateButton')) return;
+  const button = document.createElement('button');
+  button.id = 'updateButton';
+  button.textContent = '版本';
+  button.style.cssText = 'margin-left:auto;font:12px "Microsoft YaHei",sans-serif;border:1px solid var(--rule);border-radius:6px;padding:5px 10px;background:var(--surface);color:var(--muted);white-space:nowrap;cursor:pointer';
+  const oldVersion = document.querySelector('.suitebar .version');
+  if (oldVersion) oldVersion.replaceWith(button);
+  else document.querySelector('header').append(button);
+  const dialog = document.createElement('dialog');
+  dialog.id = 'updateDialog';
+  dialog.setAttribute('aria-labelledby', 'updateTitle');
+  dialog.style.cssText = 'padding:24px;width:480px;max-width:calc(100vw - 32px);border:1px solid var(--rule);border-radius:12px;background:var(--surface);color:var(--ink);box-shadow:0 16px 60px #0003';
+  dialog.innerHTML = '<h2 id="updateTitle" style="font-size:17px;margin:0 0 16px">软件更新</h2><p id="updateStatus" role="status"></p><pre id="updateNotes" style="font-family:inherit;font-size:12px;line-height:1.8;white-space:pre-wrap;max-height:40vh;overflow:auto"></pre><div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px"><button id="updateClose">关闭</button><button id="updateCheck">检查更新</button><button id="updateInstall" class="primary" hidden>更新并重启</button></div>';
+  document.body.append(dialog);
+  const status = dialog.querySelector('#updateStatus');
+  const notes = dialog.querySelector('#updateNotes');
+  const check = dialog.querySelector('#updateCheck');
+  const install = dialog.querySelector('#updateInstall');
+  for (const control of dialog.querySelectorAll('button')) control.style.cssText = 'font:inherit;border:1px solid var(--rule);border-radius:6px;padding:6px 12px;background:var(--surface);color:var(--ink);cursor:pointer';
   let current = null;
   async function refresh() {
     try {
       current = await window.pywebview.api.update_status();
-      status.textContent = 'v' + current.current + ' · ' + current.message;
-      const working = ['checking', 'installing'].includes(current.stage);
-      check.disabled = working;
-      install.hidden = current.stage !== 'available' || !current.installable;
-      details.hidden = current.stage !== 'available';
-    } catch (_) { status.textContent = '更新状态暂不可用；本地核对可继续使用。'; }
+      const available = current.stage === 'available';
+      button.textContent = current.stage === 'installing' ? '正在更新…' : available ? '有更新 · v' + current.version : 'v' + current.current;
+      button.title = current.message + '；点击查看更新';
+      button.style.color = available ? 'var(--accent)' : 'var(--muted)';
+      status.textContent = current.message;
+      notes.textContent = current.notes || '';
+      notes.hidden = !current.notes;
+      check.disabled = ['checking', 'installing'].includes(current.stage);
+      install.hidden = !available || !current.installable;
+    } catch (_) {
+      status.textContent = '更新状态暂不可用，可继续本地核对。';
+      button.title = status.textContent;
+    }
   }
+  button.onclick = () => { dialog.showModal(); refresh(); };
+  dialog.querySelector('#updateClose').onclick = () => dialog.close();
   check.onclick = async () => { await window.pywebview.api.check_updates(); await refresh(); };
-  details.onclick = () => alert(current.notes || '本次未附更新说明。');
   install.onclick = async () => {
-    if (!confirm('更新到 v' + current.version + ' 并重启？\n请先查看或保存当前结果。会话中的 AI 密钥需在新版重新填写；旧程序和已保存的报告会保留。')) return;
+    if (!confirm('更新到 v' + current.version + ' 并重启？\n程序将在关闭后替换原位置，并保留一份回退备份。已保存的报告不受影响；AI 密钥需重新填写。')) return;
     const result = await window.pywebview.api.install_update();
-    if (!result.ok) alert(result.error);
-    await refresh();
+    if (!result.ok) status.textContent = result.error;
+    else await refresh();
   };
-  refresh(); setInterval(refresh, 1000);
+  refresh(); setInterval(refresh, 1500);
 })();
