@@ -12,7 +12,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
-VERSION = '1.4.1'
+VERSION = '1.4.2'
 REPOSITORY = 'Youki117/pharma-data-review'
 PRODUCTS = {'suite': '资料核对工具', 'method': '方法验证资料核对', 'content': '内容一致性核对'}
 MAX_DOWNLOAD = 200 * 1024 * 1024
