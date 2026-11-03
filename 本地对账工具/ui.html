@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>稳定性资料核对</title>
+<style>
+  :root{
+    --ground:#F4F6F7; --surface:#FFFFFF; --surface2:#EDF0F2;
+    --ink:#15191C; --ink2:#3E4A50; --muted:#68757C;
+    --rule:#DDE3E6; --rule2:#EAEEF0;
+    --accent:#1B5E70; --accent-soft:#E4EEF1;
+    --crit:#A8272E; --crit-bg:#FAECEC;
+    --warn:#8A5A0F; --warn-bg:#FAF1DF;
+    --note:#31637F; --note-bg:#E9F0F4;
+    --ok:#2E6B4E; --ok-bg:#E6F1EA;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SFMono-Regular","DejaVu Sans Mono",monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#101416; --surface:#171D20; --surface2:#1E262A;
+      --ink:#E6ECEE; --ink2:#B8C5CA; --muted:#8A9AA1;
+      --rule:#2A343A; --rule2:#222B30;
+      --accent:#6FB6CB; --accent-soft:#17282E;
+      --crit:#E88E92; --crit-bg:#2A1A1B;
+      --warn:#D8AC63; --warn-bg:#2A2214;
+      --note:#8CB9D2; --note-bg:#16242C;
+      --ok:#7CC09E; --ok-bg:#16241D;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+       font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;
+       display:flex;flex-direction:column;overflow:hidden}
+
+
+  header{background:var(--surface);border-bottom:1px solid var(--rule);
+         padding:12px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .brand{display:flex;align-items:baseline;gap:10px;margin-right:auto}
+  .brand h1{margin:0;font-size:16px;font-weight:650;letter-spacing:.01em}
+  .brand span{font-size:12px;color:var(--muted)}
+  .pathbox{display:flex;align-items:center;gap:0;border:1px solid var(--rule);
+           border-radius:6px;background:var(--surface);overflow:hidden;
+           flex:1 1 320px;min-width:240px;max-width:560px}
+  .pathbox input{border:0;outline:0;padding:8px 11px;font:inherit;font-size:13px;
+                 background:transparent;color:var(--ink);flex:1;min-width:0;
+                 font-family:var(--mono)}
+  .pathbox input::placeholder{color:var(--muted);font-family:var(--sans)}
+  button{font:inherit;font-size:13px;border-radius:6px;border:1px solid var(--rule);
+         background:var(--surface);color:var(--ink);padding:8px 14px;cursor:pointer;
+         transition:background .12s,border-color .12s}
+  button:hover:not(:disabled){background:var(--surface2)}
+  button:disabled{opacity:.45;cursor:default}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .pathbox button{border:0;border-left:1px solid var(--rule);border-radius:0;padding:8px 13px}
+
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:550}
+  button.primary:hover:not(:disabled){background:var(--accent);filter:brightness(1.15)}
+  @media (prefers-color-scheme:dark){button.primary{color:#0C1214}}
+
+
+  .bar{padding:11px 22px;border-bottom:1px solid var(--rule);background:var(--accent-soft);
+       display:flex;align-items:center;gap:14px;font-size:13px}
+  .track{flex:1;height:5px;border-radius:3px;background:var(--rule);overflow:hidden;min-width:100px}
+  .fill{height:100%;background:var(--accent);width:0;transition:width .18s}
+  .bar .file{font-family:var(--mono);font-size:12px;color:var(--muted);
+             white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40vw}
+  .bar.err{background:var(--crit-bg);color:var(--crit)}
+  .bar.err pre{margin:0;font-family:var(--mono);font-size:12px;white-space:pre-wrap;max-height:150px;overflow:auto}
+
+
+
+  .health{padding:13px 22px;border-bottom:1px solid var(--rule);font-size:13px;line-height:1.7}
+  .health.bad{background:var(--crit-bg);border-left:4px solid var(--crit)}
+  .health.ok{background:var(--accent-soft)}
+  .health h4{margin:0 0 6px;font-size:13.5px;font-weight:650}
+  .health.bad h4{color:var(--crit)}
+  .health ul{margin:4px 0 0;padding-left:18px}
+  .health li{margin-bottom:3px}
+  .health .more{color:var(--muted);cursor:pointer;text-decoration:underline;
+                text-underline-offset:2px}
+
+
+  .seg{display:inline-flex;border:1px solid var(--rule);border-radius:5px;overflow:hidden;flex:none}
+  .seg button{border:0;border-radius:0;padding:5px 13px;font-size:12.5px;background:transparent;
+       color:var(--muted)}
+  .seg button+button{border-left:1px solid var(--rule)}
+  .seg button.on{background:var(--accent);color:#fff;font-weight:550}
+  @media (prefers-color-scheme:dark){.seg button.on{color:#0C1214}}
+
+  tr.srow{cursor:pointer}
+  tr.srow:hover td{background:var(--accent-soft)}
+  .cnt{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+  .cnt b{color:var(--ink);font-size:13.5px}
+  .back{cursor:pointer;color:var(--accent);text-decoration:underline;
+        text-underline-offset:2px;font-size:12.5px}
+  .rollup{padding:15px 20px;font-size:13.5px;line-height:1.9}
+  .rollup li{margin-bottom:3px}
+
+
+  .stats{display:flex;gap:0;border-bottom:1px solid var(--rule);background:var(--surface);
+         overflow-x:auto}
+  .stat{padding:11px 17px;border-right:1px solid var(--rule2);white-space:nowrap}
+  .stat b{display:block;font-family:var(--mono);font-size:18px;font-weight:600;
+          line-height:1.25;font-variant-numeric:tabular-nums}
+  .stat span{font-size:11.5px;color:var(--muted);letter-spacing:.02em}
+
+
+  main{flex:1;display:flex;min-height:0}
+  nav{width:216px;flex:none;border-right:1px solid var(--rule);background:var(--surface);
+      overflow-y:auto;padding:6px 0 20px}
+  .grp{padding:13px 15px 4px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+       color:var(--muted);font-weight:600}
+  .lv{display:flex;align-items:center;gap:8px;padding:6px 15px;cursor:pointer;
+      border-left:3px solid transparent;font-size:13px}
+  .lv:hover{background:var(--surface2)}
+  .lv.on{background:var(--accent-soft);border-left-color:var(--accent);font-weight:600}
+  .lv .dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .lv .n{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted);
+         font-variant-numeric:tabular-nums}
+  .lv.on .n{color:var(--ink)}
+  .dot.crit{background:var(--crit)} .dot.warn{background:var(--warn)} .dot.note{background:var(--note)}
+
+  section{flex:1;display:flex;flex-direction:column;min-width:0}
+  .toolbar{padding:11px 20px;border-bottom:1px solid var(--rule);background:var(--surface);
+           display:flex;gap:11px;align-items:center;flex-wrap:wrap}
+  .toolbar input[type=search],.toolbar select{font:inherit;font-size:13px;padding:7px 11px;
+      border:1px solid var(--rule);border-radius:6px;background:var(--surface);color:var(--ink);outline:0}
+  .toolbar input[type=search]{flex:1;min-width:150px}
+  .toolbar input:focus,.toolbar select:focus{border-color:var(--accent)}
+  .desc{padding:10px 20px;background:var(--surface2);border-bottom:1px solid var(--rule);
+        font-size:12.5px;color:var(--ink2)}
+
+  .tablewrap{flex:1;overflow:auto}
+
+  .tablewrap::-webkit-scrollbar{width:13px;height:13px}
+  .tablewrap::-webkit-scrollbar-track{background:var(--surface2)}
+  .tablewrap::-webkit-scrollbar-thumb{background:var(--muted);border-radius:7px;
+       border:3px solid var(--surface2)}
+  .tablewrap::-webkit-scrollbar-thumb:hover{background:var(--ink2)}
+
+  table{border-collapse:collapse;width:100%;min-width:860px;font-size:12.5px}
+  thead th{position:sticky;top:0;z-index:1;background:var(--surface);text-align:left;
+           padding:8px 10px;border-bottom:1px solid var(--rule);font-size:11px;
+           letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600;
+           white-space:nowrap}
+  tbody td{padding:8px 10px;border-bottom:1px solid var(--rule2);vertical-align:top}
+  tbody tr:hover{background:var(--surface2)}
+  td.v{font-family:var(--mono);font-variant-numeric:tabular-nums;word-break:break-word;
+       min-width:88px;max-width:170px}
+  td.where{white-space:nowrap;color:var(--ink2)}
+  td.item{min-width:130px;max-width:200px;word-break:break-word}
+  td.note{color:var(--muted);min-width:180px;max-width:330px;font-size:12px}
+  .sub{display:block;font-size:10.5px;color:var(--muted);margin-top:3px;
+       line-height:1.45;word-break:break-word}
+  .sub.mono{font-family:var(--mono);font-size:10px;opacity:.85}
+  .tag{display:inline-block;font-size:10.5px;padding:2px 7px;border-radius:3px;
+       white-space:nowrap;font-weight:600;letter-spacing:.02em}
+  .tag.crit{background:var(--crit-bg);color:var(--crit)}
+  .tag.warn{background:var(--warn-bg);color:var(--warn)}
+  .tag.note{background:var(--note-bg);color:var(--note)}
+  .tag.soft{background:var(--surface2);color:var(--muted);font-weight:500}
+
+  .jump{display:inline-block;font-family:var(--sans);font-size:10.5px;color:var(--accent);
+        cursor:pointer;text-decoration:none;margin-left:6px;white-space:nowrap;
+        border:1px solid var(--rule);border-radius:3px;padding:0 5px;line-height:1.5}
+  .jump:hover{background:var(--accent-soft)}
+  .jump.busy{opacity:.5;pointer-events:none}
+
+  .empty{padding:56px 24px;text-align:center;color:var(--muted)}
+  .empty h2{font-size:16px;font-weight:600;color:var(--ink2);margin:0 0 8px}
+  .empty p{margin:0 auto;max-width:52ch;font-size:13px}
+  .empty code{font-family:var(--mono);font-size:12px;background:var(--surface2);
+              padding:1px 5px;border-radius:3px}
+  .tree{display:inline-block;text-align:left;font-family:var(--mono);font-size:12px;
+        background:var(--surface);border:1px solid var(--rule);border-radius:6px;
+        padding:12px 16px;margin-top:16px;color:var(--ink2);line-height:1.75}
+
+  footer{border-top:1px solid var(--rule);background:var(--surface);padding:9px 20px;
+         display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted)}
+  footer .grow{margin-left:auto}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>稳定性资料核对</h1>
+    <span>汇总表 × 原始检验报告单</span><span id="ver"></span>
+  </div>
+  <div class="pathbox">
+    <input id="path" placeholder="选择存放稳定性资料的根目录…" spellcheck="false">
+    <button id="pick">浏览…</button>
+  </div>
+  <button id="go" class="primary" disabled>开始核对</button>
+</header>
+
+<div class="bar" id="prog" hidden>
+  <span id="progText">正在核对…</span>
+  <div class="track"><div class="fill" id="fill"></div></div>
+  <span class="file" id="progFile"></span>
+</div>
+
+<div class="bar err" id="err" hidden><pre id="errText"></pre></div>
+
+<div class="health" id="health" hidden></div>
+<div class="stats" id="stats" hidden></div>
+
+<main>
+  <nav id="nav" hidden></nav>
+  <section>
+    <div class="toolbar" id="toolbar" hidden>
+      <div class="seg" id="viewSeg">
+        <button data-view="sum" class="on">摘要</button><button data-view="all">明细</button>
+      </div>
+      <input type="search" id="q" placeholder="搜索项目、批号、内容…">
+      <select id="prod"><option value="">全部品种</option></select>
+      <span id="count" style="color:var(--muted);font-size:12.5px"></span>
+    </div>
+    <div class="desc" id="desc" hidden></div>
+    <div class="tablewrap" id="wrap">
+      <div class="empty" id="empty">
+        <h2>选择一个数据根目录，然后点「开始核对」</h2>
+        <p>目录里每个品种一个子文件夹；汇总表放在品种文件夹第一层，检验报告单放在它下面任意子目录。只识别 <code>.docx</code>。</p>
+        <div class="tree">数据根目录/<br>
+&nbsp;&nbsp;├ 某某片/<br>
+&nbsp;&nbsp;│&nbsp;&nbsp;├ 3-2-P-8稳定性.docx&nbsp;&nbsp;<span style="color:var(--accent)">← 汇总表</span><br>
+&nbsp;&nbsp;│&nbsp;&nbsp;└ docx版/&nbsp;xxx检验报告单.docx&nbsp;&nbsp;<span style="color:var(--accent)">← 报告单</span><br>
+&nbsp;&nbsp;└ 某某原料药/ …</div>
+      </div>
+    </div>
+    <footer id="foot" hidden>
+      <span id="footNote"></span>
+      <span class="grow"></span>
+      <button id="quit">退出程序</button>
+      <button id="export" class="primary">导出 CSV…</button>
+    </footer>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+
+// 与后台通信走 pywebview 的 JS 桥，不经过 HTTP，也就不需要开端口。
+const READY = new Promise(done => {
+  if (window.pywebview && window.pywebview.api) done();
+  else window.addEventListener('pywebviewready', () => done(), {once:true});
+});
+async function api(name, arg) {
+  await READY;
+  const A = window.pywebview.api;
+  switch (name) {
+    case 'pick':     return A.pick((arg && arg.title) || '');
+    case 'run':      return A.start(arg.root);
+    case 'progress': return A.progress();
+    case 'results':  return A.results();
+    case 'export':   return A.export(arg.dir);
+    case 'reveal':   return A.reveal(arg.path);
+    case 'open':     return A.open_loc(arg.loc);
+    case 'version':  return A.version();
+    case 'quit':     return A.quit();
+  }
+  throw new Error('未知接口 ' + name);
+}
+let DATA = null, LEVEL = null, TIMER = null;
+api('version').then(r => { $('#ver').textContent = 'v' + r.version; }).catch(() => {});
+// VIEW: 默认「摘要」——两千条明细里绝大多数是同一件事的重复，人要看的是件数
+let VIEW = 'sum', GID = null;
+const esc = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+$('#path').addEventListener('input', () => { $('#go').disabled = !$('#path').value.trim(); });
+
+$('#pick').onclick = async () => {
+  const r = await api('pick', {title:'选择存放稳定性资料的根目录'});
+  if (r.path) { $('#path').value = r.path; $('#go').disabled = false; }
+};
+
+$('#go').onclick = async () => {
+  const root = $('#path').value.trim();
+  if (!root) return;
+  $('#go').disabled = true; $('#pick').disabled = true;
+  $('#err').hidden = true; $('#empty').hidden = true;
+  $('#stats').hidden = true; $('#nav').hidden = true;
+  $('#health').hidden = true;
+  $('#toolbar').hidden = true; $('#desc').hidden = true; $('#foot').hidden = true;
+  $('#wrap').innerHTML = ''; $('#prog').hidden = false;
+  $('#fill').style.width = '0%'; $('#progText').textContent = '正在读取目录…';
+  const r = await api('run', {root});
+  if (r.ok === false) { fail(r.error); return; }
+  TIMER = setInterval(poll, 250);
+};
+
+function fail(msg) {
+  clearInterval(TIMER);
+  $('#prog').hidden = true; $('#err').hidden = false; $('#errText').textContent = msg;
+  $('#go').disabled = false; $('#pick').disabled = false;
+}
+
+async function poll() {
+  const p = await api('progress');
+  if (p.stage === 'convert') {
+    const pct = p.total ? Math.round(p.done * 100 / p.total) : 0;
+    $('#fill').style.width = pct + '%';
+    $('#progText').textContent = '正在把 .doc 转成 .docx… ' + p.done + ' / ' + p.total + ' 份（用本机的 Word / WPS，首次启动要几秒）';
+    $('#progFile').textContent = p.current || '';
+  } else if (p.stage === 'running' || p.stage === 'discover') {
+    const pct = p.total ? Math.round(p.done * 100 / p.total) : 0;
+    $('#fill').style.width = pct + '%';
+    $('#progText').textContent = '正在核对… ' + p.done + ' / ' + p.total + ' 份文件';
+    $('#progFile').textContent = p.current || '';
+  } else if (p.stage === 'done') {
+    clearInterval(TIMER);
+    $('#prog').hidden = true; $('#go').disabled = false; $('#pick').disabled = false;
+    DATA = await api('results');
+    render();
+  } else if (p.stage === 'error') {
+    fail(p.error || '核对过程出错');
+  }
+}
+
+function render() {
+  const ps = DATA.products, is = DATA.issues;
+  const files = ps.reduce((a, b) => a + b.files, 0);
+  const cmp = ps.reduce((a, b) => a + b.compared, 0);
+  const same = ps.reduce((a, b) => a + b.same, 0);
+  const crit = (DATA.summary || []).filter(x => x.tier === 'crit').length;
+  const pct = cmp ? (same * 100 / cmp).toFixed(1) : '0.0';
+  $('#stats').innerHTML =
+    stat(ps.length, '品种') + stat(files, '份检验报告单') +
+    stat(cmp.toLocaleString(), '可比对数据') +
+    stat(pct + '%', '完全一致', 'var(--ok)') +
+    stat(crit.toLocaleString(), '必看', crit ? 'var(--crit)' : '') +
+    stat((DATA.summary || []).length.toLocaleString(), '要人看的件数') +
+    stat(is.length.toLocaleString(), '明细条数');
+  $('#stats').hidden = false;
+
+  const cnt = {}; is.forEach(i => cnt[i.level] = (cnt[i.level] || 0) + 1);
+  const tiers = (DATA.tiers || []).map(t => [t.key, t.name]);
+  // 选中态统一由 paint() 里的 classList.toggle('on', …) 负责，这里只出结构。
+  // 原来这一行还拼了一个 class="lv on"，和前面的 class="lv" 撞成重复属性 ——
+  // 结果对，是因为 paint() 随后又覆盖了一遍，但那是碰巧，不是设计。
+  let nav = '<div class="grp">全部</div>' +
+    '<div class="lv" data-lv="">' +
+    '<span class="dot" style="background:var(--muted)"></span>全部问题' +
+    '<span class="n">' + is.length + '</span></div>';
+  tiers.forEach(([t, label]) => {
+    const rows = DATA.levels.filter(l => l.tier === t && cnt[l.name]);
+    if (!rows.length) return;
+    nav += '<div class="grp">' + label + '</div>';
+    rows.forEach(l => {
+      nav += '<div class="lv" data-lv="' + esc(l.name) + '"><span class="dot ' + t +
+             '"></span>' + esc(l.name) + '<span class="n">' + cnt[l.name] + '</span></div>';
+    });
+  });
+  $('#nav').innerHTML = nav; $('#nav').hidden = false;
+  $('#nav').querySelectorAll('.lv').forEach(el => {
+    el.onclick = () => { LEVEL = el.dataset.lv || null; GID = null; paint(); };
+  });
+
+  const prods = [...new Set(is.map(i => i.product))].sort();
+  $('#prod').innerHTML = '<option value="">全部品种</option>' +
+    prods.map(p => '<option>' + esc(p) + '</option>').join('');
+  $('#toolbar').hidden = false; $('#foot').hidden = false;
+
+  renderHealth(DATA.health || {blocking: [], notes: []}, ps);
+  paint();
+}
+
+function renderHealth(h, ps) {
+  const bad = (h.blocking || []).length;
+  const notes = h.notes || [];
+  const el = $('#health');
+  const li = (xs, n) => '<ul>' + xs.slice(0, n).map(x => '<li>' + esc(x) + '</li>').join('') +
+    (xs.length > n ? '<li class="more" data-all="1">还有 ' + (xs.length - n) + ' 条，点击展开</li>' : '') +
+    '</ul>';
+  if (bad) {
+    el.className = 'health bad';
+    el.innerHTML = '<h4>体检不通过：有资料没有被读进来，下面的统计和问题清单都不完整</h4>' +
+      li(h.blocking, 4) +
+      (notes.length ? '<div style="margin-top:8px;color:var(--muted)">另有 ' + notes.length +
+        ' 条注意事项</div>' + li(notes, 2) : '');
+  } else {
+    const files = ps.reduce((a, b) => a + b.files, 0);
+    const tin = ps.reduce((a, b) => a + (b.tables_in || 0), 0);
+    const tall = ps.reduce((a, b) => a + (b.tables || 0), 0);
+    el.className = 'health ok';
+    el.innerHTML = '<h4>体检通过：' + ps.length + ' 个品种的汇总表（' + tin + '/' + tall +
+      ' 张结果表）和 ' + files + ' 份检验报告单都已解析并参与对账</h4>' +
+      (notes.length ? li(notes, 3) : '');
+  }
+  el.hidden = false;
+  el.querySelectorAll('.more').forEach(m => m.onclick = () => {
+    const all = (bad ? h.blocking : []).concat(notes);
+    m.outerHTML = '<ul>' + all.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>';
+  });
+  $('#footNote').textContent = bad
+    ? '体检不通过：' + bad + ' 项资料未读入，结果不完整'
+    : (notes.length ? '体检通过，有 ' + notes.length + ' 条注意事项' : '体检通过，全部表格均已归类');
+}
+
+const stat = (v, l, c) => '<div class="stat"><b' + (c ? ' style="color:' + c + '"' : '') +
+                          '>' + v + '</b><span>' + l + '</span></div>';
+
+function paint() {
+  $('#nav').querySelectorAll('.lv').forEach(el =>
+    el.classList.toggle('on', (el.dataset.lv || null) === LEVEL));
+  const meta = DATA.levels.find(l => l.name === LEVEL);
+  $('#desc').hidden = !meta;
+  if (meta) $('#desc').textContent = meta.desc;
+  $('#viewSeg').querySelectorAll('button').forEach(b =>
+    b.classList.toggle('on', b.dataset.view === VIEW));
+  if (VIEW === 'sum' && !GID) { paintSummary(); return; }
+  paintDetail();
+}
+
+// 摘要视图：同一件事只占一行。两千条明细里绝大多数是同一件事在不同批号、
+// 不同时间点上的重复，人要判断的是「有多少件不同的事」。
+function paintSummary() {
+  const q = $('#q').value.trim().toLowerCase(), pf = $('#prod').value;
+  const all = (DATA.summary || []).filter(g =>
+    (!LEVEL || g.level === LEVEL) && (!pf || g.product === pf) &&
+    (!q || (g.item + g.sv + g.iv + g.note + g.scope).toLowerCase().includes(q)));
+  // 「数量差异」档在不筛类别时折叠成一段话——它回答的是两边资料量差多少，
+  // 按「只核双方都有的部分」的口径不需要逐条看
+  const showCountRows = !!LEVEL;
+  const rows = showCountRows ? all : all.filter(g => g.tier !== 'count');
+  const counts = showCountRows ? [] : all.filter(g => g.tier === 'count');
+  $('#count').textContent = all.length + ' 件事 · ' +
+    all.reduce((a, b) => a + b.n, 0).toLocaleString() + ' 条明细';
+
+  let h = '';
+  if (rows.length) {
+    h += '<table><thead><tr><th>类型</th><th>考察项目</th><th>汇总表</th>' +
+         '<th>检验报告单</th><th>次数</th><th>涉及范围</th></tr></thead><tbody>';
+    rows.forEach(g => {
+      h += '<tr class="srow" data-gid="' + g.gid + '">' +
+           '<td><span class="tag ' + g.tier + '">' + esc(g.level) + '</span></td>' +
+           '<td class="item">' + esc(g.item || '-') +
+               '<span class="sub">' + esc(g.product) + '</span></td>' +
+           '<td class="v">' + esc(g.sv) + '</td>' +
+           '<td class="v">' + esc(g.iv) + '</td>' +
+           '<td class="cnt"><b>' + g.n + '</b> 条</td>' +
+           '<td class="note">' + esc(g.scope || '-') + '</td></tr>';
+    });
+    h += '</tbody></table>';
+  }
+  if (counts.length) {
+    h += '<div class="rollup"><b>数量差异</b>（' + counts.length + ' 件，' +
+         '两边资料量本身的差异，不参与对账）<ul>' +
+         (DATA.count_rollup || []).map(x => '<li>' + esc(x) + '</li>').join('') +
+         '</ul><span class="back" data-lv="__count">逐条查看</span></div>';
+  }
+  if (!h) {
+    h = '<div class="empty"><h2>没有符合条件的问题</h2><p>换个类别或清空搜索条件试试。</p></div>';
+  }
+  $('#wrap').innerHTML = h;
+  $('#wrap').querySelectorAll('tr.srow').forEach(tr => tr.onclick = () => {
+    GID = tr.dataset.gid; VIEW = 'all'; paint();
+  });
+  const b = $('#wrap').querySelector('.back[data-lv="__count"]');
+  if (b) b.onclick = () => {
+    LEVEL = (DATA.levels.find(l => l.tier === 'count') || {}).name || null;
+    paint();
+  };
+}
+
+// 从题注里取出表号：「表3.2.P.8- 16自研制剂100mg（批号：241101）加速试验考察结果（单位：%）」
+// -> 「表3.2.P.8-16」。取不出来就退回前 18 个字，总比什么都不给强。
+function tableNo(cap) {
+  const m = String(cap || '').match(/表\s*3\.2\.[PS]\.\d+\s*-?\s*\d+/);
+  return m ? m[0].replace(/\s+/g, '') : String(cap || '').slice(0, 18);
+}
+
+// 位置的小字：「第 3 张表·第 12 行·第 5 列」。正文段落没有行列，只给按钮
+function where(loc) {
+  if (!loc || !loc.pos) return '';
+  return '第 ' + (loc.pos[0] + 1) + ' 张表·第 ' + (loc.pos[1] + 1) + ' 行·第 ' + (loc.pos[2] + 1) + ' 列';
+}
+function jumpBtn(loc, k, side) {
+  if (!loc || !loc.file) return '';
+  return '<a class="jump" data-k="' + k + '" data-side="' + side + '" title="' +
+         esc(loc.file) + '">打开 ↗</a>';
+}
+const HOW = {
+  cell:  (r, loc) => '已在 ' + r.app + ' 里选中那一格：' + base(loc.file) + (where(loc) ? '　' + where(loc) : ''),
+  table: (r, loc) => '已用 ' + r.app + ' 打开并定位到第 ' + (loc.pos[0] + 1) + ' 张表，但表里没找到「' + loc.q + '」，请在这张表的第 ' + (loc.pos[1] + 1) + ' 行附近找',
+  open:  (r, loc) => '已用 ' + r.app + ' 打开 ' + base(loc.file) + '，未能自动定位，请用 Ctrl+F 搜索「' + loc.q + '」',
+  marked: (r, loc) => '本机没有 Word / WPS，已用默认程序打开一份带标记的副本「' + base(r.copy) + '」：第一页就是问题所在的那一行，黄色格是「' + loc.q + '」。如果没看到，去默认程序（ONLYOFFICE 等）的标签栏找这个文件名。原文件没动，要改请回原文件改',
+  shell: (r, loc) => '已用系统默认程序打开 ' + base(loc.file) + '。本机没有 Word / WPS，也没能生成标记副本（' + (r.error || '') + '），请用 Ctrl+F 搜索「' + loc.q + '」' + (where(loc) ? '（' + where(loc) + '）' : ''),
+};
+const base = p => String(p || '').split(/[\\/]/).pop();
+
+async function jump(loc, el) {
+  if (!loc) return;
+  el.classList.add('busy');
+  $('#footNote').textContent = '正在打开 ' + base(loc.file) + '…（首次启动 Word / WPS 要几秒）';
+  try {
+    const r = await api('open', {loc});
+    if (!r.ok) { $('#footNote').textContent = '打不开：' + (r.error || '未知错误'); return; }
+    $('#footNote').textContent = (HOW[r.how] || HOW.open)(r, loc);
+  } catch (e) {
+    $('#footNote').textContent = '打开失败：' + e;
+  } finally { el.classList.remove('busy'); }
+}
+
+function paintDetail() {
+  const q = $('#q').value.trim().toLowerCase(), pf = $('#prod').value;
+  const grp = GID ? (DATA.summary || []).find(g => g.gid === GID) : null;
+  const rows = DATA.issues.filter(i =>
+    (!GID || i.gid === GID) &&
+    (!LEVEL || i.level === LEVEL) && (!pf || i.product === pf) &&
+    (!q || (i.item + i.batch + i.sv + i.iv + i.note + i.file).toLowerCase().includes(q)));
+  $('#count').textContent = rows.length.toLocaleString() + ' 条';
+
+  if (!rows.length) {
+    $('#wrap').innerHTML = '<div class="empty"><h2>没有符合条件的问题</h2>' +
+      '<p>换个类别或清空搜索条件试试。</p></div>';
+    return;
+  }
+  const show = rows.slice(0, 800);
+  // 6 列而不是 8 列：品种并进「考察项目」、来源文件并进「说明」，
+  // 都作为次要信息小字显示。窗口 1140 宽时表格才不会横向滚动。
+  let h = '';
+  if (grp) {
+    h += '<div class="rollup" style="padding-bottom:8px">' +
+         '<span class="back" id="toSum">← 回到摘要</span>　' +
+         esc(grp.level) + '：' + esc(grp.item || '-') +
+         '　<span style="color:var(--muted)">共 ' + grp.n + ' 条</span></div>';
+  }
+  h += '<table><thead><tr><th>类型</th><th>位置</th><th>考察项目</th>' +
+          '<th>汇总表</th><th>检验报告单</th><th>说明</th></tr></thead><tbody>';
+  show.forEach((i, k) => {
+    h += '<tr><td><span class="tag ' + i.tier + '">' + esc(i.level) + '</span></td>' +
+         '<td class="where">' + esc(i.cond) + ' ' + esc(i.batch) +
+             (i.spec && i.spec !== '-' ? ' ' + esc(i.spec) : '') +
+             (i.time && i.time !== '-' ? ' ' + esc(i.time) + '月' : '') +
+             // 汇总表里是哪张表。一份汇总表有二三十张，没有这个信息
+             // 审核人只能一张张翻。表号是最省事的定位。
+             (i.stable ? '<span class="sub mono">' + esc(tableNo(i.stable)) +
+                         '</span>' : '') + '</td>' +
+         '<td class="item">' + esc(i.item) +
+             '<span class="sub">' + esc(i.product) + '</span></td>' +
+         // 值的下面给「打开」：点了用 Word / WPS 打开原文件并选中那一格
+         '<td class="v">' + esc(i.sv) +
+             (i.sloc ? '<span class="sub">' + esc(where(i.sloc)) + jumpBtn(i.sloc, k, 'sloc') + '</span>' : '') + '</td>' +
+         '<td class="v">' + esc(i.iv) +
+             (i.iloc ? '<span class="sub">' + esc(where(i.iloc)) + jumpBtn(i.iloc, k, 'iloc') + '</span>' : '') + '</td>' +
+         '<td class="note">' + esc(i.note) +
+             (i.match && i.match.indexOf('未经确认') >= 0
+               ? ' <span class="tag soft">' + esc(i.match) + '</span>' : '') +
+             (i.file && i.file !== '-' && i.file.indexOf('聚合') < 0
+               ? '<span class="sub mono">' + esc(i.file) + '</span>' : '') + '</td></tr>';
+  });
+  h += '</tbody></table>';
+  if (rows.length > show.length)
+    h += '<div class="empty" style="padding:22px"><p>已显示前 ' + show.length +
+         ' 条，共 ' + rows.length.toLocaleString() + ' 条。用搜索缩小范围，或导出 CSV 查看全部。</p></div>';
+  $('#wrap').innerHTML = h;
+  const t = $('#toSum');
+  if (t) t.onclick = () => { GID = null; VIEW = 'sum'; paint(); };
+  $('#wrap').querySelectorAll('a.jump').forEach(a => a.onclick = () =>
+    jump(show[+a.dataset.k][a.dataset.side], a));
+}
+
+$('#viewSeg').querySelectorAll('button').forEach(b => b.onclick = () => {
+  VIEW = b.dataset.view; GID = null; paint();
+});
+$('#q').addEventListener('input', paint);
+$('#prod').addEventListener('change', () => { GID = null; paint(); });
+
+$('#quit').onclick = async () => {
+  if (DATA && !confirm('退出程序？未导出的结果会丢失。')) return;
+  try { await api('quit'); } catch (e) {}
+};
+
+$('#export').onclick = async () => {
+  const btn = $('#export');
+  btn.disabled = true;
+  try {
+    const d = await api('pick', {title:'选择导出位置'});
+    if (!d.path) return;
+    const r = await api('export', {dir:d.path});
+    if (!r.ok) { $('#footNote').textContent = '导出失败：' + r.error; return; }
+    $('#footNote').innerHTML = '已导出：<span style="font-family:var(--mono)">' +
+      esc(r.path) + '</span> ';
+    const a = document.createElement('button');
+    a.textContent = '打开所在文件夹';
+    a.style.marginLeft = '8px';
+    a.onclick = () => api('reveal', {path:r.path});
+    $('#footNote').appendChild(a);
+  } finally { btn.disabled = false; }
+};
+</script>
+</body>
+</html>

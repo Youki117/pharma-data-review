@@ -1,0 +1,3 @@
+pywebview>=6.0,<7
+pywin32>=311; sys_platform == 'win32'
+pyinstaller>=6.0,<7

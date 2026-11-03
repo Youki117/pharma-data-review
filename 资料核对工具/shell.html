@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>资料核对工具</title>
+<style>
+:root{color-scheme:light;--bg:#F4F6F7;--surface:#fff;--ink:#15191C;--muted:#68757C;--rule:#DDE3E6;--accent:#1B5E70;--selected:#E4EEF1}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#101416;--surface:#171D20;--ink:#E6ECEE;--muted:#8A9AA1;--rule:#2A343A;--accent:#6FB6CB;--selected:#17282E}}
+*{box-sizing:border-box}html,body{height:100%;margin:0}body{display:flex;flex-direction:column;background:var(--bg);color:var(--ink);font:13px/1.6 "Segoe UI","Microsoft YaHei",sans-serif;overflow:hidden}
+.suitebar{display:flex;align-items:center;gap:26px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--rule);flex-shrink:0;height:58px}.suitebrand{font-weight:650;font-size:14px;white-space:nowrap}.tabs{display:flex;align-self:stretch;gap:6px}.tabs button{font:inherit;color:var(--muted);background:none;border:0;border-bottom:3px solid transparent;padding:0 16px;cursor:pointer;white-space:nowrap}.tabs button[aria-selected=true]{color:var(--accent);border-bottom-color:var(--accent);background:var(--selected);font-weight:600}.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:-5px}.number{font:11px Consolas,monospace;margin-right:8px;opacity:.7}.version{margin-left:auto;font-size:11px;color:var(--muted)}.pages{flex:1;min-height:0;position:relative}.pages iframe{border:0;width:100%;height:100%;display:block;background:var(--bg)}[hidden]{display:none!important}#loading{position:absolute;inset:40% 0 auto;text-align:center;color:var(--muted)}
+@media(max-width:900px){.suitebar{gap:12px;padding:0 12px}.tabs{gap:0}.tabs button{padding:0 12px}.version{display:none}.number{display:none}}
+</style>
+</head>
+<body>
+<div class="suitebar"><div class="suitebrand">资料核对工具</div><div class="tabs" role="tablist" aria-label="选择核对任务">
+<button id="tab-method" role="tab" aria-selected="true" aria-controls="page-method" data-task="method"><span class="number">01</span>方法验证核对</button>
+<button id="tab-stability" role="tab" aria-selected="false" aria-controls="page-stability" tabindex="-1" data-task="stability"><span class="number">02</span>稳定性资料核对</button>
+<button id="tab-content" role="tab" aria-selected="false" aria-controls="page-content" tabindex="-1" data-task="content"><span class="number">03</span>内容一致性核对</button>
+</div><span class="version">v1.3.0</span></div>
+<main class="pages"><p id="loading" role="status">正在载入核对页面…</p>
+<iframe id="page-method" role="tabpanel" aria-labelledby="tab-method" title="方法验证核对页面"></iframe>
+<iframe id="page-stability" role="tabpanel" aria-labelledby="tab-stability" title="稳定性资料核对页面" hidden></iframe>
+<iframe id="page-content" role="tabpanel" aria-labelledby="tab-content" title="内容一致性核对页面" hidden></iframe>
+</main>
+<script>
+const pages=__PAGES__;
+let started=false;
+function activate(task){
+  for(const button of document.querySelectorAll('[data-task]')){
+    const selected=button.dataset.task===task;
+    button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;
+    const frame=document.getElementById('page-'+button.dataset.task);frame.hidden=!selected;
+    if(selected&&started)frame.contentWindow.dispatchEvent(new Event('suiteactivate'));
+  }
+}
+for(const button of document.querySelectorAll('[data-task]')){
+  button.onclick=()=>activate(button.dataset.task);
+  button.onkeydown=event=>{
+    const tabs=[...document.querySelectorAll('[data-task]')];let i=tabs.indexOf(button);
+    if(event.key==='ArrowRight')i=(i+1)%tabs.length;
+    else if(event.key==='ArrowLeft')i=(i+tabs.length-1)%tabs.length;
+    else if(event.key==='Home')i=0;else if(event.key==='End')i=tabs.length-1;else return;
+    event.preventDefault();tabs[i].focus();activate(tabs[i].dataset.task);
+  };
+}
+function ready(){
+  if(started||!window.pywebview?.api)return;started=true;
+  for(const [name,html] of Object.entries(pages))document.getElementById('page-'+name).srcdoc=html;
+  document.getElementById('loading').hidden=true;
+}
+window.addEventListener('pywebviewready',ready);ready();
+</script>
+</body>
+</html>
