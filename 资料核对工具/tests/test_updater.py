@@ -169,5 +169,23 @@ class UpdateTests(unittest.TestCase):
                 with patch.object(sys, 'frozen', True, create=True):
                     self.assertTrue(updater.launch_installed('suite'))
                 launch.assert_called_once_with([str(target)], cwd=target.parent)
+
+    def test_guide_remembers_per_product_outside_program_and_reports_write_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            with patch.dict('os.environ', {'LOCALAPPDATA': temporary}):
+                update = updater.Updater('suite')
+                self.assertEqual(update.guide_status(), {'seen': False, 'product': 'suite', 'busy': False})
+                self.assertTrue(update.guide_complete()['ok'])
+                self.assertTrue(updater.Updater('suite').guide_status()['seen'])
+                self.assertFalse(updater.Updater('method').guide_status()['seen'])
+                marker = updater.update_home('suite') / 'guide-seen'
+                self.assertEqual(marker.read_bytes(), b'')
+                update.busy = lambda: True
+                self.assertTrue(update.guide_status()['busy'])
+                update.busy = lambda: False
+                update._state['stage'] = 'installing'
+                self.assertTrue(update.guide_status()['busy'])
+                with patch.object(Path, 'touch', side_effect=PermissionError):
+                    self.assertFalse(update.guide_complete()['ok'])
 if __name__ == '__main__':
     unittest.main()

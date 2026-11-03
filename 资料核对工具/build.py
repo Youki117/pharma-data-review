@@ -10,7 +10,7 @@ NAME = '资料核对工具'
 
 def main():
     import win32com.client
-    command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--onedir', '--windowed', '--noupx', '--name', NAME, '--distpath', str(HERE / 'dist' / ('v' + VERSION)), '--icon', str(ROOT / '本地对账工具' / 'icon.ico'), '--paths', str(ROOT), '--paths', str(ROOT / '方法验证核对'), '--paths', str(ROOT / '内容一致性核对'), '--paths', str(ROOT / '本地对账工具'), '--hidden-import', 'win32com.client.dynamic', '--hidden-import', 'pythoncom', '--hidden-import', 'pywintypes', '--add-data', str(HERE / 'shell.html') + os.pathsep + '.', '--add-data', str(HERE / 'update_ui.js') + os.pathsep + '.']
+    command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--onedir', '--windowed', '--noupx', '--name', NAME, '--distpath', str(HERE / 'dist' / ('v' + VERSION)), '--icon', str(ROOT / '本地对账工具' / 'icon.ico'), '--paths', str(ROOT), '--paths', str(ROOT / '方法验证核对'), '--paths', str(ROOT / '内容一致性核对'), '--paths', str(ROOT / '本地对账工具'), '--hidden-import', 'win32com.client.dynamic', '--hidden-import', 'pythoncom', '--hidden-import', 'pywintypes', '--add-data', str(HERE / 'shell.html') + os.pathsep + '.', '--add-data', str(HERE / 'update_ui.js') + os.pathsep + '.', '--add-data', str(HERE / 'guide.js') + os.pathsep + '.']
     for name, folder in [('method', '方法验证核对'), ('stability', '本地对账工具'), ('content', '方法验证核对')]:
         command.extend(['--add-data', str(ROOT / folder / 'ui.html') + os.pathsep + 'pages/' + name])
     subprocess.run(command + [str(HERE / 'suite.py')], cwd=HERE, check=True)

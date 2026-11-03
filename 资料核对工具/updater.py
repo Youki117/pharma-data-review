@@ -12,7 +12,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
-VERSION = '1.4.0'
+VERSION = '1.4.1'
 REPOSITORY = 'Youki117/pharma-data-review'
 PRODUCTS = {'suite': '资料核对工具', 'method': '方法验证资料核对', 'content': '内容一致性核对'}
 MAX_DOWNLOAD = 200 * 1024 * 1024
@@ -139,6 +139,7 @@ class Updater:
         def loaded():
             assets = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
             window.evaluate_js((assets / 'update_ui.js').read_text(encoding='utf-8'))
+            window.evaluate_js((assets / 'guide.js').read_text(encoding='utf-8'))
             if '--update-token' in sys.argv:
                 token = sys.argv[sys.argv.index('--update-token') + 1:][:1]
                 if token and re.fullmatch('[0-9a-f]{32}', token[0]):
@@ -156,6 +157,18 @@ class Updater:
     def status(self):
         with self._lock:
             return dict(self._state)
+
+    def guide_status(self):
+        return {'seen': (update_home(self.product) / 'guide-seen').is_file(), 'product': self.product, 'busy': self.busy() or self.installing()}
+
+    def guide_complete(self):
+        try:
+            marker = update_home(self.product) / 'guide-seen'
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.touch(exist_ok=True)
+            return {'ok': True}
+        except OSError:
+            return {'ok': False, 'error': '引导状态未能保存，下次打开仍会提示。'}
 
     def installing(self):
         return self.status()['stage'] == 'installing'

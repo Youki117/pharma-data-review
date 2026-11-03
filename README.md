@@ -8,6 +8,12 @@ Windows 本地桌面程序，在同一窗口中切换三个页面：
 
 支持原生文件／目录拖放和多层目录读取。需求一、三支持按一级目录分批，也可整个目录一批；多文件配对不明确时提示整理，不自动猜配。
 
+## 新手引导
+
+第一次打开自动显示分步引导，高亮任务页面、资料导入、可选 AI、开始核对与结果入口。可随时跳过，右上角“使用引导”可重新打开；支持上一步、下一步和 Esc 退出。
+
+完成或跳过后，在当前 Windows 用户的 `%LOCALAPPDATA%/pharma-data-review/产品/guide-seen` 记住状态，重启或更新后不重复弹出；三合一、独立方法验证和内容核对分别记录。关闭程序但未完成或跳过时，下次仍会提示。引导不导入资料、不启动核对、不调用 AI；核对或更新期间暂不可打开。
+
 ## 下载和更新
 
 从 [Releases](https://github.com/Youki117/pharma-data-review/releases/latest) 下载 `review-suite-v版本.zip`，解压到新目录，双击 `资料核对工具.exe`，保留 `_internal` 文件夹。Windows 需要 Edge WebView2。

@@ -70,6 +70,12 @@ class Api:
     def update_status(self):
         return self._updater.status()
 
+    def guide_status(self):
+        return self._updater.guide_status()
+
+    def guide_complete(self):
+        return self._updater.guide_complete()
+
     def check_updates(self):
         return self._updater.check()
 
