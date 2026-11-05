@@ -274,7 +274,7 @@ async function api(name, arg) {
   }
   throw new Error('未知接口 ' + name);
 }
-let DATA = null, LEVEL = null, TIMER = null;
+let DATA = null, LEVEL = null, TIMER = null, POLLING = false;
 api('version').then(r => { $('#ver').textContent = 'v' + r.version; }).catch(() => {});
 // VIEW: 默认「摘要」——两千条明细里绝大多数是同一件事的重复，人要看的是件数
 let VIEW = 'sum', GID = null;
@@ -290,16 +290,25 @@ $('#pick').onclick = async () => {
 $('#go').onclick = async () => {
   const root = $('#path').value.trim();
   if (!root) return;
-  $('#go').disabled = true; $('#pick').disabled = true;
-  $('#err').hidden = true; $('#empty').hidden = true;
-  $('#stats').hidden = true; $('#nav').hidden = true;
-  $('#health').hidden = true;
-  $('#toolbar').hidden = true; $('#desc').hidden = true; $('#foot').hidden = true;
-  $('#wrap').innerHTML = ''; $('#prog').hidden = false;
-  $('#fill').style.width = '0%'; $('#progText').textContent = '正在读取目录…';
-  const r = await api('run', {root});
-  if (r.ok === false) { fail(r.error); return; }
-  TIMER = setInterval(poll, 250);
+  try {
+    clearInterval(TIMER);
+    $('#go').disabled = true; $('#pick').disabled = true;
+    $('#err').hidden = true;
+    $('#stats').hidden = true; $('#nav').hidden = true;
+    $('#health').hidden = true;
+    $('#toolbar').hidden = true; $('#desc').hidden = true; $('#foot').hidden = true;
+    // 欢迎内容与上次结果都由 wrap 替换；首次渲染后不再有 #empty。
+    $('#wrap').innerHTML = ''; $('#prog').hidden = false;
+    $('#fill').style.width = '0%'; $('#progText').textContent = '正在读取目录…';
+    $('#progFile').textContent = '';
+    const r = await api('run', {root});
+    if (r.ok === false) { fail(r.error); return; }
+    DATA = null; LEVEL = null; GID = null; VIEW = 'sum';
+    $('#q').value = ''; $('#prod').value = '';
+    TIMER = setInterval(poll, 250);
+  } catch (e) {
+    fail('核对未能启动，请重新选择目录后重试。');
+  }
 };
 
 function fail(msg) {
@@ -309,26 +318,36 @@ function fail(msg) {
 }
 
 async function poll() {
-  const p = await api('progress');
-  if (p.stage === 'convert') {
-    const pct = p.total ? Math.round(p.done * 100 / p.total) : 0;
-    $('#fill').style.width = pct + '%';
-    $('#progText').textContent = '正在把 .doc 转成 .docx… ' + p.done + ' / ' + p.total + ' 份（用本机的 Word / WPS，首次启动要几秒）';
-    $('#progFile').textContent = p.current || '';
-  } else if (p.stage === 'running' || p.stage === 'discover') {
-    const pct = p.total ? Math.round(p.done * 100 / p.total) : 0;
-    $('#fill').style.width = pct + '%';
-    $('#progText').textContent = '正在核对… ' + p.done + ' / ' + p.total + ' 份文件';
-    $('#progFile').textContent = p.current || '';
-  } else if (p.stage === 'done') {
-    clearInterval(TIMER);
-    $('#prog').hidden = true; $('#go').disabled = false; $('#pick').disabled = false;
-    DATA = await api('results');
-    render();
-  } else if (p.stage === 'error') {
-    fail(p.error || '核对过程出错');
+  if (POLLING) return;
+  POLLING = true;
+  try {
+    const p = await api('progress');
+    if (p.stage === 'convert') {
+      const pct = p.total ? Math.round(p.done * 100 / p.total) : 0;
+      $('#fill').style.width = pct + '%';
+      $('#progText').textContent = '正在把 .doc 转成 .docx… ' + p.done + ' / ' + p.total + ' 份（用本机的 Word / WPS，首次启动要几秒）';
+      $('#progFile').textContent = p.current || '';
+    } else if (p.stage === 'running' || p.stage === 'discover') {
+      const pct = p.total ? Math.round(p.done * 100 / p.total) : 0;
+      $('#fill').style.width = pct + '%';
+      $('#progText').textContent = '正在核对… ' + p.done + ' / ' + p.total + ' 份文件';
+      $('#progFile').textContent = p.current || '';
+    } else if (p.stage === 'done') {
+      clearInterval(TIMER);
+      $('#prog').hidden = true;
+      DATA = await api('results');
+      render();
+      $('#go').disabled = false; $('#pick').disabled = false;
+    } else if (p.stage === 'error') {
+      fail(p.error || '核对过程出错');
+    }
+  } catch (e) {
+    fail('读取核对进度或结果失败，请重试；如仍失败，请重新打开工具。');
+  } finally {
+    POLLING = false;
   }
 }
+
 
 function render() {
   const ps = DATA.products, is = DATA.issues;
