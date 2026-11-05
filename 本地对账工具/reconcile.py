@@ -27,13 +27,23 @@ LIMIT_FRAGMENT = re.compile('^(?:标示量|按|在|每|A\\+|\\d)')
 def _ws(s):
     return re.sub('[\\s\u3000]', '', str(s or ''))
 
-def name_noise(s):
+def name_noise(s, limit=''):
     t = nz(s)
     t = re.sub('[（(](?:单位[:：]?)?[%％][）)]$', '', t)
     t = re.sub('[（(][%％][）)]', '', t)
     t = t.rstrip('。,，;；')
     if t.startswith('含') and len(t) >= 3:
         t = t[1:]
+    if re.fullmatch('(?:霉菌[、及和与]?酵母菌|酵母菌[、及和与]?霉菌)总数', t):
+        t = '霉菌酵母菌总数'
+    t = re.sub('^大肠埃希菌(?:/g|\\(g\\))$', '大肠埃希菌(g)', t)
+    full = nz(limit)
+    if t == '大肠埃希菌' and re.search('每1g|不得检出/g', full):
+        t = '大肠埃希菌(g)'
+    if full.startswith(t):
+        qualifier = _SCOPE_QUAL.match(full[len(t):])
+        if qualifier:
+            t += qualifier.group(0)
     return t
 
 def keyset(rec):
@@ -135,16 +145,19 @@ def _merged_cell(text, leaf):
     cands = [lf, re.sub('[（(][^）)]*[）)]\\s*$', '', lf)]
     return any((c and len(c) >= 2 and (c in t) for c in cands))
 
-def limit_nature(a, b, leaf=''):
+def limit_nature(a, b, leaf='', other_leaf=''):
     ta, tb = (nz(a), nz(b))
     oa, ob = (bool(_BARE_OK.match(ta)), bool(_BARE_OK.match(tb)))
     if oa != ob:
         which = '汇总表' if oa else '检验报告单'
         return ('限度实质不一致', '%s只写了「应符合规定」，另一侧写的是具体要求，两者无法互相溯源' % which)
-    qa, qb = (bool(_SCOPE_QUAL.search(ta)), bool(_SCOPE_QUAL.search(tb)))
+    qa = bool(_SCOPE_QUAL.search(nz(leaf) + ta))
+    qb = bool(_SCOPE_QUAL.search(nz(other_leaf) + tb))
     if qa != qb:
         which = '汇总表' if qa else '检验报告单'
         return ('限度实质不一致', '只有%s的限度带「除…外」这类范围限定：阈值相同，但两边说的可能不是同一个量' % which)
+    if qa and qb and (set(_SCOPE_QUAL.findall(nz(leaf) + ta)) != set(_SCOPE_QUAL.findall(nz(other_leaf) + tb))):
+        return ('限度实质不一致', '两侧排除范围不同，请按完整项目名和标准确认适用范围')
     ma, mb = (_merged_cell(ta, leaf), _merged_cell(tb, leaf))
     if ma != mb:
         which = '汇总表' if ma else '检验报告单'
@@ -229,7 +242,7 @@ def cmp_value(a, b):
     ta, tb = (norm_text(a), norm_text(b))
     if ta == tb:
         return ('same', '')
-    if norm2(ta) == norm2(tb):
+    if norm2(ta).replace('黏', '粘') == norm2(tb).replace('黏', '粘'):
         return ('style', '同一含义、写法不同')
     if ta in NONDETECT and tb in NONDETECT:
         return ('same', '')
@@ -395,7 +408,8 @@ def run(name, summary_path, coa_paths, verbose=False, on_progress=None, doc_coun
             issues.append(dict(stable=sr.get('caption', ''), level=lv, cond=sr['cond'], batch=sr['batch'], spec=sr['spec'], time=sr['time'], item=sr['cat'] + '/' + sr['leaf'], sv=svv, iv=ivv, file=hitdoc['file'], note=note, match=MATCH_NOTE[hitrule], sloc=_loc(summary_path, sr.get('pos'), sr['value'], sr.get('caption')), iloc=_loc(hitdoc['path'], hit.get('pos'), hit['value'])))
         na, nb = (sr.get('leaf', '').strip(), hit.get('leaf', '').strip())
         degenerate = nz(na) == nz(sr.get('cat', '')) or nz(nb) == nz(hit.get('cat', '')) or LIMIT_FRAGMENT.match(na) or LIMIT_FRAGMENT.match(nb)
-        if na and nb and (not degenerate) and (name_noise(na) != name_noise(nb)):
+        merged_names = nz(sr.get('cat', '')) == '微生物限度' and nz(hit.get('cat', '')) == '微生物限度' and _merged_cell(hit.get('limit', ''), na) and _merged_cell(hit.get('limit', ''), nb)
+        if na and nb and (na != nb) and (not degenerate) and (not merged_names) and (name_noise(na, sr.get('limit', '')) != name_noise(nb, hit.get('limit', ''))):
             stat['name'] = stat.get('name', 0) + 1
             issues.append(dict(stable=sr.get('caption', ''), level='项目名称不一致', cond=sr['cond'], batch=sr['batch'], spec=sr['spec'], time=sr['time'], item=sr['cat'] + '/' + na, sv=na, iv=nb, file=hitdoc['file'], sloc=_loc(summary_path, sr.get('pos'), na, sr.get('caption')), iloc=_loc(hitdoc['path'], hit.get('pos'), nb), note='两份文件对同一项目的叫法不同，已按别名配对，但名称本身有差异'))
         la = norm_limit(sr.get('limit', ''), sr.get('leaf', ''))
@@ -406,7 +420,7 @@ def run(name, summary_path, coa_paths, verbose=False, on_progress=None, doc_coun
                 stat['width'] = stat.get('width', 0) + 1
                 issues.append(dict(stable=sr.get('caption', ''), level='全半角/标点不一致', cond=sr['cond'], batch=sr['batch'], spec=sr['spec'], time=sr['time'], item=sr['cat'] + '/' + sr['leaf'], sv=sr.get('limit', ''), iv=hit.get('limit', ''), file=hitdoc['file'], sloc=_loc(summary_path, sr.get('pos'), sr.get('limit', ''), sr.get('caption')), iloc=_loc(hitdoc['path'], hit.get('pos'), hit.get('limit', '')), note='限度文字仅全角/半角或标点不同'))
         if la and lb and (la != lb):
-            lv, why = limit_nature(sr.get('limit', ''), hit.get('limit', ''), sr.get('leaf', ''))
+            lv, why = limit_nature(sr.get('limit', ''), hit.get('limit', ''), sr.get('leaf', ''), hit.get('leaf', ''))
             stat['limit' if lv == '限度表述不一致' else 'limitreal'] = stat.get('limit' if lv == '限度表述不一致' else 'limitreal', 0) + 1
             issues.append(dict(stable=sr.get('caption', ''), level=lv, cond=sr['cond'], batch=sr['batch'], spec=sr['spec'], time=sr['time'], item=sr['cat'] + '/' + sr['leaf'], sv=sr.get('limit', ''), iv=hit.get('limit', ''), file=hitdoc['file'], note=why, sloc=_loc(summary_path, sr.get('pos'), sr.get('limit', ''), sr.get('caption')), iloc=_loc(hitdoc['path'], hit.get('pos'), hit.get('limit', ''))))
     sidx = set()

@@ -100,6 +100,16 @@ def split_multi(item_cat, limit, value, sub=''):
         hit = [(lf, a) for lf, a in cand if _mkey(lf) in named]
         if len(hit) >= 2 and len(hit) * 2 >= len(cand):
             return [(lf, a, named[_mkey(lf)]) for lf, a in hit]
+    if nz(item_cat) == '微生物限度' and nz(value).rstrip('。.;；') in ('符合规定', '均符合规定') and (len(ll) >= 2):
+        shared = []
+        for a in ll:
+            named_limit = _NAMED.match(a)
+            lf = named_limit.group(1).strip() if named_limit else leaf_from_limit(a)
+            if lf not in ('需氧菌总数', '霉菌和酵母菌总数', '大肠埃希菌', '洋葱伯克霍尔德菌'):
+                break
+            shared.append((lf, a, value))
+        if len(shared) == len(ll) and len({r[0] for r in shared}) == len(ll):
+            return shared
     if len(ll) >= 2 and len(ll) == len(vl):
         out = []
         ok = True

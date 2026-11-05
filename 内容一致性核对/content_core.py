@@ -18,7 +18,7 @@ def clean_label(text):
     return norm(text).strip(':：')
 
 def paragraph_body(text):
-    return re.sub('^\\s*(?:\\d{1,2}[、．]|\\d{1,2}\\.(?!\\d)|[（(]\\d{1,2}[)）])\\s*', '', text)
+    return re.sub('^\\s*(?:\\d{1,2}[、．]|\\d{1,2}\\.(?!\\d)|[（(]\\d{1,2}[)）])\\s*', '', text).replace('按照', '按')
 
 def label_value(text):
     return norm(text).strip('（）()，,、；;。').replace('：', ':').replace('ml', 'mL')
@@ -51,13 +51,19 @@ def prepare_content(paths):
                 if value and clean_label(value) not in PRODUCT_LABELS:
                     product_values.add(norm(value))
         product = next(iter(product_values)) if len(product_values) == 1 else ''
-        subject = ()
+        subject, batch = ((), '')
         for ref, source in local.items():
             item = dict(source)
             own = entities(item['text'])
-            if item['kind'] == 'paragraph' and own:
-                subject = own
-            item.update(document=document['name'], path=document['path'], doc_id=doc_id, product=product, subject=own or subject, local_ref=ref)
+            if item['kind'] == 'paragraph':
+                if own and own != subject:
+                    batch = ''
+                if own:
+                    subject = own
+                match = re.fullmatch('\\s*(?:批号\\s*[:：]\\s*)?([A-Za-z0-9][A-Za-z0-9-]{3,})\\s*批\\s*[:：]?\\s*', item['text'])
+                if match:
+                    batch = match[1]
+            item.update(document=document['name'], path=document['path'], doc_id=doc_id, product=product, subject=own or subject, batch=batch, local_ref=ref)
             index[doc_id + '-' + ref] = item
         text = re.sub('\\[((?:P\\d{4}|T\\d{4})(?:-R\\d{3})?(?:-C\\d{3})?)\\]', lambda m: '[' + doc_id + '-' + m[1] + ']', document['text'])
         documents.append({'id': doc_id, 'name': document['name'], 'path': document['path'], 'product': product, 'text': text})
@@ -92,9 +98,9 @@ def screen_content(index):
             if value and clean_label(value) not in LABELS and (len(value) <= 100):
                 values = [(clean_label(item['text']), value, next_ref)]
         for label, value, location in values:
-            scope = (item['product'] or item['doc_id'], item['subject'], label)
+            scope = (item['product'] or item['doc_id'], item['subject'], item.get('batch', ''), label)
             labels.setdefault(scope, []).append((label_value(value), location, value))
-    for (owner, subject, label), values in labels.items():
+    for (owner, subject, batch, label), values in labels.items():
         unique = {value for value, ref, raw in values}
         if len(unique) < 2:
             continue
@@ -120,6 +126,8 @@ def screen_content(index):
             if left['doc_id'] != right['doc_id'] and (not (left['product'] and left['product'] == right['product'])):
                 continue
             if left['subject'] and right['subject'] and (left['subject'] != right['subject']):
+                continue
+            if left.get('batch') and right.get('batch') and (left['batch'] != right['batch']):
                 continue
             a, b = (shingles[i], shingles[j])
             if not a or not b or a == b:
